@@ -5,12 +5,13 @@ import { runPhase1 } from "./ingestion/phase1.js";
 import { newsForStock } from "./ingestion/newsProcessor.js";
 import { loadAll } from "./ingestion/dataLoader.js";
 import { listPortfoliosMeta, runPhase2 } from "./analytics/phase2.js";
+import { runPhase3 } from "./reasoning/phase3.js";
 
 const program = new Command();
 
 program
   .name("advisor")
-  .description("Financial Advisor Agent — Phases 1 & 2 CLI")
+  .description("Financial Advisor Agent — Phases 1–3 CLI")
   .version("0.1.0");
 
 function sentimentChalk(s: string): string {
@@ -222,6 +223,56 @@ program
       }
     } else {
       console.log(chalk.green("\nNo concentration flags."));
+    }
+  });
+
+program
+  .command("advise")
+  .description(
+    "Phase 3: causal briefing. Default: OpenAI when OPENAI_API_KEY is set, else template. Use --llm or --template to force."
+  )
+  .argument("<id>", "Portfolio id, e.g. PORTFOLIO_002")
+  .option("--json", "Print full API JSON")
+  .option("--llm", "Force OpenAI briefing (errors if OPENAI_API_KEY is missing)")
+  .option("--template", "Force rule-based template; ignore API key")
+  .action(async (id: string, opts: { json?: boolean; llm?: boolean; template?: boolean }) => {
+    if (opts.llm && opts.template) {
+      console.error(chalk.red("Use only one of --llm or --template."));
+      process.exit(1);
+    }
+    const mode = opts.llm ? "llm" : opts.template ? "template" : "auto";
+    const r = await runPhase3(id, { mode });
+    if (opts.json) {
+      console.log(JSON.stringify(r, null, 2));
+      return;
+    }
+    const b = r.briefing;
+    console.log(chalk.bold.cyan(`\nBriefing — ${r.portfolioId}  (${r.asOf})\n`));
+    console.log(
+      chalk.gray(
+        `Mode: ${r.mode === "llm" ? `OpenAI (${r.model ?? "?"})` : "template (rule-based)"}  |  Confidence: ${r.confidence}  |  Signals: ${r.meta.signalCount}`
+      )
+    );
+    console.log(chalk.bold("\n") + b.headline + "\n");
+    console.log(b.summary + "\n");
+    console.log(chalk.bold("Why it moved:"));
+    console.log(b.why_portfolio_moved + "\n");
+    if (b.causal_chains.length > 0) {
+      console.log(chalk.bold("Causal links:"));
+      b.causal_chains.forEach((c, i) => console.log(`  ${i + 1}. ${c.text}`));
+    }
+    if (b.conflicts.length > 0) {
+      console.log(chalk.bold.yellow("\nConflicts / nuance:"));
+      for (const c of b.conflicts) {
+        console.log(`  • ${c.description}\n    → ${c.how_to_read_it}`);
+      }
+    }
+    if (b.key_drivers.length > 0) {
+      console.log(chalk.bold("\nKey drivers:"));
+      b.key_drivers.forEach((k) => console.log(`  - ${k}`));
+    }
+    if (b.limitations) {
+      console.log(chalk.gray(`\nNote: ${b.limitations}`));
     }
   });
 

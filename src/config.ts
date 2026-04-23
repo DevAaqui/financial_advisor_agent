@@ -7,6 +7,9 @@ const EnvSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
   DATA_DIR: z.string().default("../"),
+  /** Required for LLM-generated briefings (Phase 3). If unset, a deterministic template is used. */
+  OPENAI_API_KEY: z.string().optional(),
+  OPENAI_MODEL: z.string().default("gpt-4o-mini"),
 });
 
 const parsed = EnvSchema.parse(process.env);
@@ -25,4 +28,6 @@ export const config = {
   logLevel: parsed.LOG_LEVEL,
   dataDir,
   projectRoot,
+  openaiApiKey: parsed.OPENAI_API_KEY,
+  openaiModel: parsed.OPENAI_MODEL,
 } as const;

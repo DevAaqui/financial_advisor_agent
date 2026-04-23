@@ -1,4 +1,4 @@
-# Financial Advisor Agent — Phases 1 & 2
+# Financial Advisor Agent — Phases 1–3
 
 Express + TypeScript backend for the **Autonomous Financial Advisor Agent** challenge.
 
@@ -14,7 +14,14 @@ Express + TypeScript backend for the **Autonomous Financial Advisor Agent** chal
 2. **Allocation** — direct stocks vs MFs; MF categories (equity / debt / hybrid / …); **sector look-through** via `mutual_funds.json` → `sector_allocation`.
 3. **Risk** — sector concentration (>40% / >70%), Banking+FS cluster, rate-sensitive exposure, single-name weight.
 
-> Phases 1–2 use **no LLM**. See [docs/phase1-explained.md](./docs/phase1-explained.md) and [docs/phase2-explained.md](./docs/phase2-explained.md).
+### Phase 3 — Autonomous reasoning
+
+1. **Signal ranking** — news × position weights (stocks + MF sector look-through); top signals only.
+2. **Conflicts** — stock/sector news vs same-day price when scope is not unrelated macro.
+3. **Briefing** — JSON: headline, summary, `why_portfolio_moved`, causal chains, conflicts, key drivers, limitations. **OpenAI** if `OPENAI_API_KEY` is set; else **template** output.
+4. **Confidence** — deterministic score (not LLM-invented).
+
+> Phases 1–2 use **no LLM**. Phase 3 uses an LLM **optionally**. See [docs/phase1-explained.md](./docs/phase1-explained.md), [docs/phase2-explained.md](./docs/phase2-explained.md), [docs/phase3-explained.md](./docs/phase3-explained.md).
 
 ---
 
@@ -49,6 +56,7 @@ financial_advisor_agent/
 │   │   ├── historical.ts
 │   │   ├── portfolio.ts
 │   │   ├── mutualFund.ts
+│   │   ├── briefing.ts
 │   │   └── index.ts
 │   ├── ingestion/               # ====  Phase 1  ====
 │   │   ├── dataLoader.ts        #  Loads & validates JSON (Phase 1 + Phase 2 sources)
@@ -62,9 +70,16 @@ financial_advisor_agent/
 │   │   ├── mfClassification.ts
 │   │   ├── risk.ts
 │   │   └── phase2.ts            #  runPhase2(portfolioId)
+│   ├── reasoning/               # ====  Phase 3  ====
+│   │   ├── signals.ts
+│   │   ├── confidence.ts
+│   │   ├── templateBriefing.ts
+│   │   ├── llmBriefing.ts
+│   │   └── phase3.ts            #  runPhase3(portfolioId)
 │   └── api/
 │       ├── phase1Routes.ts      #  /api/v1/phase1/*
-│       └── phase2Routes.ts      #  /api/v1/phase2/*
+│       ├── phase2Routes.ts      #  /api/v1/phase2/*
+│       └── phase3Routes.ts      #  /api/v1/phase3/*
 ├── package.json
 ├── tsconfig.json
 └── .env.example
@@ -137,12 +152,20 @@ API listening on http://localhost:3000 (phases 1 & 2)
 | GET | `/api/v1/phase2/:id/allocation` | Allocation only |
 | GET | `/api/v1/phase2/:id/risks` | Risk flags only |
 
+### Phase 3 endpoints
+
+| Method | Path | Purpose |
+| ------ | ---- | ------- |
+| GET | `/api/v1/phase3` | Index |
+| GET | `/api/v1/phase3/:id` | Causal briefing + confidence (`OPENAI_API_KEY` optional) |
+
 ### Quick checks
 
 ```bash
 curl -s http://localhost:3000/api/v1/phase1/market | jq .overallSentiment
 curl -s http://localhost:3000/api/v1/phase2/portfolios | jq
 curl -s http://localhost:3000/api/v1/phase2/PORTFOLIO_002 | jq .pnl
+curl -s http://localhost:3000/api/v1/phase3/PORTFOLIO_002 | jq .briefing.headline
 ```
 
 ---
@@ -158,6 +181,9 @@ npm run cli -- news
 npm run cli -- news-for HDFCBANK
 npm run cli -- portfolios
 npm run cli -- portfolio PORTFOLIO_002
+npm run cli -- advise PORTFOLIO_002
+npm run cli -- advise PORTFOLIO_002 --llm      # force OpenAI (needs OPENAI_API_KEY)
+npm run cli -- advise PORTFOLIO_002 --template # force rule-based; no key
 ```
 
 Sample output (`market`):
@@ -194,5 +220,4 @@ Broad market declined (-0.99%): NIFTY 50 -1.00%, BSE SENSEX -0.99%. Notable dive
 
 ## Next Phases
 
-- **Phase 3** — Causal narrative: merge Phase 1 + Phase 2 outputs; one (or two) LLM call(s) for the briefing.
-- **Phase 4** — Langfuse tracing + self-evaluation of reasoning quality.
+- **Phase 4** — Langfuse tracing for LLM calls + self-evaluation of reasoning quality.

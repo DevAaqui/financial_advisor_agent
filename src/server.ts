@@ -5,6 +5,7 @@ import { config } from "./config.js";
 import { logger } from "./observability/logger.js";
 import { phase1Router } from "./api/phase1Routes.js";
 import { phase2Router } from "./api/phase2Routes.js";
+import { phase3Router } from "./api/phase3Routes.js";
 import { loadAll, invalidateCache } from "./ingestion/dataLoader.js";
 
 export function createApp(): express.Express {
@@ -24,10 +25,11 @@ export function createApp(): express.Express {
 
   app.use("/api/v1/phase1", phase1Router);
   app.use("/api/v1/phase2", phase2Router);
+  app.use("/api/v1/phase3", phase3Router);
 
   app.get("/", (_req, res) => {
     res.json({
-      name: "Financial Advisor Agent — Phases 1 & 2 API",
+      name: "Financial Advisor Agent — Phases 1–3 API",
       dataDir: config.dataDir,
       endpoints: [
         "GET  /health",
@@ -42,6 +44,7 @@ export function createApp(): express.Express {
         "GET  /api/v1/phase2/portfolios",
         "GET  /api/v1/phase2/:id",
         "GET  /api/v1/phase2/:id/pnl | /allocation | /risks",
+        "GET  /api/v1/phase3/:id              # Causal briefing (set OPENAI_API_KEY for LLM)",
       ],
     });
   });
@@ -64,7 +67,7 @@ async function main() {
   await loadAll();
   const app = createApp();
   app.listen(config.port, () => {
-    logger.info(`API listening on http://localhost:${config.port} (phases 1 & 2)`);
+    logger.info(`API listening on http://localhost:${config.port} (phases 1–3)`);
   });
 }
 
