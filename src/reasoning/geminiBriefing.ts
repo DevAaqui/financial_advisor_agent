@@ -2,6 +2,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { config } from "../config.js";
 import { BriefingSchema, type Briefing } from "../schemas/briefing.js";
 import { logger } from "../observability/logger.js";
+import { flushLangfuse, getLangfuseClient } from "../observability/langfuseClient.js";
 
 const SYSTEM = `You are a senior India markets portfolio analyst writing a client briefing.
 Rules:
@@ -19,9 +20,15 @@ export type GeminiBriefingBundle = {
   briefing: Briefing;
   model: string;
   usage?: { total_tokens?: number };
+  /** Present when Langfuse keys are configured (Phase 4). */
+  langfuseTraceId?: string;
+  langfuseTraceUrl?: string;
 };
 
-export async function generateBriefingWithGemini(context: unknown): Promise<GeminiBriefingBundle> {
+export async function generateBriefingWithGemini(
+  context: unknown,
+  options: { portfolioId: string }
+): Promise<GeminiBriefingBundle> {
   if (!config.geminiApiKey) {
     throw new Error("GEMINI_API_KEY is not set");
   }
@@ -36,32 +43,79 @@ export async function generateBriefingWithGemini(context: unknown): Promise<Gemi
     },
   });
 
-  console.log("model EXECUTING>>>>>>>>>>>>>>>>>>>>>>>>>");
-
   const userText =
     "Context JSON follows. Read it and produce the briefing JSON.\n\n" +
     JSON.stringify(context, null, 2).slice(0, 100_000);
 
-  const result = await model.generateContent(userText);
-  const text = result.response.text();
-  console.log("TEXT>>>>>>>>>>>>>>>>>>>>>>>>>", text);
-  if (!text) {
-    console.log("EMPTY LLM RESPONSE>>>>>>>>>>>>>>>>>>>>>>>>>");
-    throw new Error("Empty LLM response");
-  }
-  let parsed: unknown;
+  const lf = getLangfuseClient();
+  const trace = lf
+    ? lf.trace({
+        name: "phase3-gemini-briefing",
+        userId: options.portfolioId,
+        metadata: { portfolioId: options.portfolioId },
+        tags: ["phase3", "gemini"],
+      })
+    : null;
+
+  const generation = trace
+    ? trace.generation({
+        name: "gemini-generate-briefing",
+        model: config.geminiModel,
+        modelParameters: { temperature: 0.35, responseMimeType: "application/json" },
+        input: { system: SYSTEM, user: userText },
+      })
+    : null;
+
   try {
-    parsed = JSON.parse(text);
+    const result = await model.generateContent(userText);
+    const text = result.response.text();
+    if (!text) {
+      throw new Error("Empty LLM response");
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch (e) {
+      logger.error({ text: text.slice(0, 500) }, "LLM did not return valid JSON");
+      if (generation) {
+        generation.end({ output: { error: "invalid_json", sample: text.slice(0, 2000) } });
+      }
+      throw e;
+    }
+    const briefing = BriefingSchema.parse(parsed);
+    const u = result.response.usageMetadata;
+    const usage = u ? { total_tokens: u.totalTokenCount } : undefined;
+
+    if (generation) {
+      const usageDetails: Record<string, number> = {};
+      if (u) {
+        usageDetails.input = u.promptTokenCount;
+        usageDetails.output = u.candidatesTokenCount;
+        usageDetails.total = u.totalTokenCount;
+      }
+      generation.end({
+        output: briefing,
+        usageDetails: Object.keys(usageDetails).length > 0 ? usageDetails : undefined,
+      });
+    }
+
+    return {
+      briefing,
+      model: config.geminiModel,
+      usage,
+      langfuseTraceId: trace?.id,
+      langfuseTraceUrl: trace?.getTraceUrl(),
+    };
   } catch (e) {
-    console.log("ERROR PARSING JSON>>>>>>>>>>>>>>>>>>>>>>>>>", e);
-    logger.error({ text: text.slice(0, 500) }, "LLM did not return valid JSON");
+    if (generation) {
+      generation.end({
+        output: { error: e instanceof Error ? e.message : String(e) },
+      });
+    }
     throw e;
+  } finally {
+    if (lf && trace) {
+      await flushLangfuse();
+    }
   }
-  const briefing = BriefingSchema.parse(parsed);
-  const u = result.response.usageMetadata;
-  return {
-    briefing,
-    model: config.geminiModel,
-    usage: u ? { total_tokens: u.totalTokenCount } : undefined,
-  };
 }

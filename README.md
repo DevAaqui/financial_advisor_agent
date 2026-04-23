@@ -1,4 +1,4 @@
-# Financial Advisor Agent — Phases 1–3
+# Financial Advisor Agent — Phases 1–4
 
 Express + TypeScript backend for the **Autonomous Financial Advisor Agent** challenge.
 
@@ -21,7 +21,12 @@ Express + TypeScript backend for the **Autonomous Financial Advisor Agent** chal
 3. **Briefing** — JSON: headline, summary, `why_portfolio_moved`, causal chains, conflicts, key drivers, limitations. **Google Gemini** if `GEMINI_API_KEY` is set; else **template** output.
 4. **Confidence** — deterministic score (not LLM-invented).
 
-> Phases 1–2 use **no LLM**. Phase 3 uses an LLM **optionally**. See [docs/phase1-explained.md](./docs/phase1-explained.md), [docs/phase2-explained.md](./docs/phase2-explained.md), [docs/phase3-explained.md](./docs/phase3-explained.md).
+### Phase 4 — Observability and evaluation
+
+1. **Langfuse** (optional) — when `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` are set, Gemini `generateContent` is traced (prompt, JSON output, token usage). A numeric score `reasoning_quality` is sent for the same trace.
+2. **Rule-based quality** (always) — `reasoningQuality` on every Phase 3 response: grounding of `causal_chains[*].news_ids`, conflict coverage, P&L wording heuristics, and structure. Separate from `confidence`.
+
+> Phases 1–2 use **no LLM**. Phase 3 uses an LLM **optionally**. See [docs/phase1-explained.md](./docs/phase1-explained.md), [docs/phase2-explained.md](./docs/phase2-explained.md), [docs/phase3-explained.md](./docs/phase3-explained.md), [docs/phase4-explained.md](./docs/phase4-explained.md).
 
 ---
 
@@ -48,7 +53,8 @@ financial_advisor_agent/
 │   ├── server.ts                # Express entry point
 │   ├── cli.ts                   # Commander CLI
 │   ├── observability/
-│   │   └── logger.ts            # Pino logger
+│   │   ├── logger.ts            # Pino logger
+│   │   └── langfuseClient.ts   #  Langfuse singleton + flush
 │   ├── schemas/                 # Zod schemas matching the provided JSONs
 │   │   ├── market.ts
 │   │   ├── news.ts
@@ -75,6 +81,7 @@ financial_advisor_agent/
 │   │   ├── confidence.ts
 │   │   ├── templateBriefing.ts
 │   │   ├── geminiBriefing.ts
+│   │   ├── reasoningQuality.ts  #  Phase 4 — rule-based self-eval
 │   │   └── phase3.ts            #  runPhase3(portfolioId)
 │   └── api/
 │       ├── phase1Routes.ts      #  /api/v1/phase1/*
@@ -218,6 +225,3 @@ Broad market declined (-0.99%): NIFTY 50 -1.00%, BSE SENSEX -0.99%. Notable dive
 
 ---
 
-## Next Phases
-
-- **Phase 4** — Langfuse tracing for LLM calls + self-evaluation of reasoning quality.

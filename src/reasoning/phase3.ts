@@ -5,8 +5,11 @@ import { buildRankedSignals } from "./signals.js";
 import { computeReasoningConfidence } from "./confidence.js";
 import { buildTemplateBriefing } from "./templateBriefing.js";
 import { generateBriefingWithGemini } from "./geminiBriefing.js";
+import { evaluateReasoningQuality, type ReasoningQuality } from "./reasoningQuality.js";
+import { flushLangfuse, getLangfuseClient } from "../observability/langfuseClient.js";
 import { config } from "../config.js";
 import type { Briefing } from "../schemas/briefing.js";
+import type { RankedSignal, ConflictSeed } from "./signals.js";
 
 export type Phase3Result = {
   portfolioId: string;
@@ -24,6 +27,12 @@ export type Phase3Result = {
     conflictCount: number;
     criticalRiskCount: number;
   };
+  /** Phase 4 — rule-based narrative quality (distinct from `confidence`). */
+  reasoningQuality: ReasoningQuality;
+  /** Phase 4 — Langfuse trace when LLM + keys; `null` means keys set but no trace (e.g. template). */
+  observability?: {
+    langfuse: { traceId: string; traceUrl?: string } | null;
+  };
 };
 
 export type Phase3RunOptions = {
@@ -34,6 +43,46 @@ export type Phase3RunOptions = {
    */
   mode?: "auto" | "llm" | "template";
 };
+
+async function attachPhase4(
+  briefing: Briefing,
+  signals: RankedSignal[],
+  conflictSeeds: ConflictSeed[],
+  dayPnlRupees: number,
+  langfuseTraceId?: string,
+  langfuseTraceUrl?: string
+): Promise<Pick<Phase3Result, "reasoningQuality" | "observability">> {
+  const reasoningQuality = evaluateReasoningQuality(briefing, {
+    validNewsIds: new Set(signals.map((s) => s.newsId)),
+    conflictSeedCount: conflictSeeds.length,
+    dayPnlRupees,
+    signalCount: signals.length,
+  });
+
+  if (!config.langfuseEnabled) {
+    return { reasoningQuality };
+  }
+
+  const lf = getLangfuseClient();
+  if (langfuseTraceId && lf) {
+    lf.score({
+      traceId: langfuseTraceId,
+      name: "reasoning_quality",
+      value: reasoningQuality.score,
+      comment: reasoningQuality.summary.slice(0, 300),
+    });
+    await flushLangfuse();
+    return {
+      reasoningQuality,
+      observability: { langfuse: { traceId: langfuseTraceId, traceUrl: langfuseTraceUrl } },
+    };
+  }
+
+  return {
+    reasoningQuality,
+    observability: { langfuse: null },
+  };
+}
 
 export async function runPhase3(portfolioId: string, options: Phase3RunOptions = {}): Promise<Phase3Result> {
   const id = portfolioId.toUpperCase();
@@ -118,9 +167,15 @@ export async function runPhase3(portfolioId: string, options: Phase3RunOptions =
   };
 
   const generatedAt = new Date().toISOString();
+  const meta = {
+    signalCount: signals.length,
+    conflictCount: conflictSeeds.length,
+    criticalRiskCount,
+  };
 
   if (modeOpt === "template") {
     const briefing = buildTemplateBriefing(p1, p2, signals, conflictSeeds);
+    const p4 = await attachPhase4(briefing, signals, conflictSeeds, p2.pnl.dayPnlRupees);
     return {
       portfolioId: id,
       asOf: p2.asOf,
@@ -129,16 +184,24 @@ export async function runPhase3(portfolioId: string, options: Phase3RunOptions =
       briefing,
       usedLlm: false,
       mode: "template",
-      meta: {
-        signalCount: signals.length,
-        conflictCount: conflictSeeds.length,
-        criticalRiskCount,
-      },
+      meta,
+      ...p4,
     };
   }
 
   if (modeOpt === "llm" || (modeOpt === "auto" && config.geminiApiKey)) {
-    const { briefing, model, usage } = await generateBriefingWithGemini(context);
+    const { briefing, model, usage, langfuseTraceId, langfuseTraceUrl } = await generateBriefingWithGemini(
+      context,
+      { portfolioId: id }
+    );
+    const p4 = await attachPhase4(
+      briefing,
+      signals,
+      conflictSeeds,
+      p2.pnl.dayPnlRupees,
+      langfuseTraceId,
+      langfuseTraceUrl
+    );
     return {
       portfolioId: id,
       asOf: p2.asOf,
@@ -149,15 +212,13 @@ export async function runPhase3(portfolioId: string, options: Phase3RunOptions =
       model,
       usage,
       mode: "llm",
-      meta: {
-        signalCount: signals.length,
-        conflictCount: conflictSeeds.length,
-        criticalRiskCount,
-      },
+      meta,
+      ...p4,
     };
   }
 
   const briefing = buildTemplateBriefing(p1, p2, signals, conflictSeeds);
+  const p4 = await attachPhase4(briefing, signals, conflictSeeds, p2.pnl.dayPnlRupees);
   return {
     portfolioId: id,
     asOf: p2.asOf,
@@ -166,10 +227,7 @@ export async function runPhase3(portfolioId: string, options: Phase3RunOptions =
     briefing,
     usedLlm: false,
     mode: "template",
-    meta: {
-      signalCount: signals.length,
-      conflictCount: conflictSeeds.length,
-      criticalRiskCount,
-    },
+    meta,
+    ...p4,
   };
 }

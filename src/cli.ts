@@ -6,12 +6,13 @@ import { newsForStock } from "./ingestion/newsProcessor.js";
 import { loadAll } from "./ingestion/dataLoader.js";
 import { listPortfoliosMeta, runPhase2 } from "./analytics/phase2.js";
 import { runPhase3 } from "./reasoning/phase3.js";
+import { flushLangfuse } from "./observability/langfuseClient.js";
 
 const program = new Command();
 
 program
   .name("advisor")
-  .description("Financial Advisor Agent — Phases 1–3 CLI")
+  .description("Financial Advisor Agent — Phases 1–4 CLI")
   .version("0.1.0");
 
 function sentimentChalk(s: string): string {
@@ -250,9 +251,17 @@ program
     console.log(chalk.bold.cyan(`\nBriefing — ${r.portfolioId}  (${r.asOf})\n`));
     console.log(
       chalk.gray(
-        `Mode: ${r.mode === "llm" ? `Gemini (${r.model ?? "?"})` : "template (rule-based)"}  |  Confidence: ${r.confidence}  |  Signals: ${r.meta.signalCount}`
+        `Mode: ${r.mode === "llm" ? `Gemini (${r.model ?? "?"})` : "template (rule-based)"}  |  Confidence: ${r.confidence}  |  Signals: ${r.meta.signalCount}  |  Reasoning quality: ${r.reasoningQuality.score} (${r.reasoningQuality.method})`
       )
     );
+    if (r.observability?.langfuse) {
+      console.log(chalk.gray(`Langfuse trace: ${r.observability.langfuse.traceId}`));
+      if (r.observability.langfuse.traceUrl) {
+        console.log(chalk.gray(`  ${r.observability.langfuse.traceUrl}`));
+      }
+    } else if (r.observability?.langfuse === null) {
+      console.log(chalk.gray("(Langfuse configured; no LLM trace this run — template mode)"));
+    }
     console.log(chalk.bold("\n") + b.headline + "\n");
     console.log(b.summary + "\n");
     console.log(chalk.bold("Why it moved:"));
@@ -276,7 +285,10 @@ program
     }
   });
 
-program.parseAsync().catch((err) => {
-  console.error(chalk.red(err instanceof Error ? err.message : String(err)));
-  process.exit(1);
-});
+program
+  .parseAsync()
+  .then(() => flushLangfuse())
+  .catch((err) => {
+    console.error(chalk.red(err instanceof Error ? err.message : String(err)));
+    process.exit(1);
+  });

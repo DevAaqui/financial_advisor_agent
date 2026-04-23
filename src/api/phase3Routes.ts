@@ -15,7 +15,8 @@ phase3Router.get(
     res.json({
       description: "Phase 3 — Autonomous reasoning (causal briefing)",
       path: "GET /api/v1/phase3/:portfolioId",
-      note: "Set GEMINI_API_KEY for LLM. Query: ?mode=auto|llm|template (default auto). /cli: npm run cli -- advise ID --llm | --template",
+      note:
+        "Response includes Phase 4: reasoningQuality (rules) + optional Langfuse (LANGFUSE_* + GEMINI_API_KEY for traces). Query: ?mode=auto|llm|template. CLI: npm run cli -- advise ID --llm | --template",
     });
   })
 );

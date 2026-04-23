@@ -7,6 +7,7 @@ import { phase1Router } from "./api/phase1Routes.js";
 import { phase2Router } from "./api/phase2Routes.js";
 import { phase3Router } from "./api/phase3Routes.js";
 import { loadAll, invalidateCache } from "./ingestion/dataLoader.js";
+import { flushLangfuse } from "./observability/langfuseClient.js";
 
 export function createApp(): express.Express {
   const app = express();
@@ -29,7 +30,7 @@ export function createApp(): express.Express {
 
   app.get("/", (_req, res) => {
     res.json({
-      name: "Financial Advisor Agent — Phases 1–3 API",
+      name: "Financial Advisor Agent — Phases 1–4 API",
       dataDir: config.dataDir,
       endpoints: [
         "GET  /health",
@@ -44,7 +45,7 @@ export function createApp(): express.Express {
         "GET  /api/v1/phase2/portfolios",
         "GET  /api/v1/phase2/:id",
         "GET  /api/v1/phase2/:id/pnl | /allocation | /risks",
-        "GET  /api/v1/phase3/:id              # Causal briefing (set GEMINI_API_KEY for LLM)",
+        "GET  /api/v1/phase3/:id              # Briefing + Phase 4 quality (GEMINI + Langfuse optional)",
       ],
     });
   });
@@ -66,9 +67,18 @@ export function createApp(): express.Express {
 async function main() {
   await loadAll();
   const app = createApp();
-  app.listen(config.port, () => {
-    logger.info(`API listening on http://localhost:${config.port} (phases 1–3)`);
+  const server = app.listen(config.port, () => {
+    logger.info(`API listening on http://localhost:${config.port} (phases 1–4)`);
   });
+
+  const shutdown = () => {
+    void (async () => {
+      await flushLangfuse();
+      server.close(() => process.exit(0));
+    })();
+  };
+  process.once("SIGINT", shutdown);
+  process.once("SIGTERM", shutdown);
 }
 
 const isDirectRun = import.meta.url === `file://${process.argv[1]}`;
