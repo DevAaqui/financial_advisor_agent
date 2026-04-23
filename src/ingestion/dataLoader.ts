@@ -7,10 +7,14 @@ import {
   NewsDataSchema,
   SectorMappingSchema,
   HistoricalDataSchema,
+  PortfoliosFileSchema,
+  MutualFundsFileSchema,
   type MarketData,
   type NewsData,
   type SectorMapping,
   type HistoricalData,
+  type PortfoliosFile,
+  type MutualFundsFile,
 } from "../schemas/index.js";
 
 type Loaded = {
@@ -18,6 +22,8 @@ type Loaded = {
   news: NewsData;
   sectorMap: SectorMapping;
   history: HistoricalData;
+  portfoliosFile: PortfoliosFile;
+  mutualFundsFile: MutualFundsFile;
   loadedAt: string;
 };
 
@@ -34,11 +40,13 @@ async function readJson<T>(relFile: string, parser: (v: unknown) => T): Promise<
 export async function loadAll(force = false): Promise<Loaded> {
   if (cache && !force) return cache;
 
-  const [market, news, sectorMap, history] = await Promise.all([
+  const [market, news, sectorMap, history, portfoliosFile, mutualFundsFile] = await Promise.all([
     readJson("market_data.json", (v) => MarketDataSchema.parse(v)),
     readJson("news_data.json", (v) => NewsDataSchema.parse(v)),
     readJson("sector_mapping.json", (v) => SectorMappingSchema.parse(v)),
     readJson("historical_data.json", (v) => HistoricalDataSchema.parse(v)),
+    readJson("portfolios.json", (v) => PortfoliosFileSchema.parse(v)),
+    readJson("mutual_funds.json", (v) => MutualFundsFileSchema.parse(v)),
   ]);
 
   cache = {
@@ -46,6 +54,8 @@ export async function loadAll(force = false): Promise<Loaded> {
     news,
     sectorMap,
     history,
+    portfoliosFile,
+    mutualFundsFile,
     loadedAt: new Date().toISOString(),
   };
 
@@ -56,6 +66,8 @@ export async function loadAll(force = false): Promise<Loaded> {
       sectors: Object.keys(market.sector_performance).length,
       stocks: Object.keys(market.stocks).length,
       news: news.news.length,
+      portfolioIds: Object.keys(portfoliosFile.portfolios).length,
+      mutualFundSchemes: Object.keys(mutualFundsFile.mutual_funds).length,
     },
     "Data loaded"
   );

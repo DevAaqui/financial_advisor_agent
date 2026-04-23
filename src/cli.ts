@@ -2,14 +2,15 @@ import { Command } from "commander";
 import chalk from "chalk";
 import Table from "cli-table3";
 import { runPhase1 } from "./ingestion/phase1.js";
-import { newsForSector, newsForStock } from "./ingestion/newsProcessor.js";
+import { newsForStock } from "./ingestion/newsProcessor.js";
 import { loadAll } from "./ingestion/dataLoader.js";
+import { listPortfoliosMeta, runPhase2 } from "./analytics/phase2.js";
 
 const program = new Command();
 
 program
   .name("advisor")
-  .description("Financial Advisor Agent — Phase 1 CLI")
+  .description("Financial Advisor Agent — Phases 1 & 2 CLI")
   .version("0.1.0");
 
 function sentimentChalk(s: string): string {
@@ -165,7 +166,63 @@ program
         );
       }
     }
-    void newsForSector;
+  });
+
+program
+  .command("portfolios")
+  .description("List available mock portfolio IDs")
+  .action(async () => {
+    const rows = await listPortfoliosMeta();
+    const t = new Table({ head: ["ID", "Investor", "Type", "Value (₹)"] });
+    for (const r of rows) {
+      t.push([r.id, r.userName, r.portfolioType, r.currentValue.toLocaleString("en-IN")]);
+    }
+    console.log(t.toString());
+  });
+
+program
+  .command("portfolio")
+  .description("Show Phase 2 portfolio analytics (P&L, allocation, risks)")
+  .argument("<id>", "Portfolio id, e.g. PORTFOLIO_001")
+  .option("--json", "Print raw JSON")
+  .action(async (id: string, opts: { json?: boolean }) => {
+    const pid = id.toUpperCase();
+    const a = await runPhase2(pid);
+    if (opts.json) {
+      console.log(JSON.stringify(a, null, 2));
+      return;
+    }
+    console.log(chalk.bold.cyan(`\nPortfolio — ${a.profile.userName} (${a.portfolioId})\n`));
+    console.log(`Type: ${a.profile.portfolioType}  |  As of: ${a.asOf}`);
+    console.log(`Current value: ₹${a.pnl.currentValue.toLocaleString("en-IN")}`);
+    const rupee = `₹${a.pnl.dayPnlRupees.toLocaleString("en-IN")}`;
+    const pnlCol = a.pnl.dayPnlRupees >= 0 ? chalk.green : chalk.red;
+    console.log(`Day P&L: ${pnlCol(rupee)}  (${pct(a.pnl.dayPnlPercent)})\n`);
+
+    const alloc = new Table({ head: ["Slice", "Weight %"] });
+    alloc.push(["Direct stocks", a.allocation.assetTypes.DIRECT_STOCKS.toFixed(2)]);
+    alloc.push(["Mutual funds (total)", a.allocation.assetTypes.MUTUAL_FUNDS.toFixed(2)]);
+    for (const [k, v] of Object.entries(a.allocation.assetTypes.mfByType ?? {})) {
+      if (v !== undefined) alloc.push([`  MF: ${k}`, v.toFixed(2)]);
+    }
+    console.log(chalk.bold("Asset mix"));
+    console.log(alloc.toString());
+
+    const sec = new Table({ head: ["Sector (w/ MF look-through)", "Weight %"] });
+    for (const [k, v] of Object.entries(a.allocation.sectors.bySectorWithFunds).slice(0, 12)) {
+      sec.push([k, v.toFixed(2)]);
+    }
+    console.log(chalk.bold("\nTop sectors (look-through)"));
+    console.log(sec.toString());
+
+    if (a.risks.length > 0) {
+      console.log(chalk.bold.yellow("\nRisk flags:"));
+      for (const r of a.risks) {
+        console.log(`  [${r.severity}] ${r.code}: ${r.message}`);
+      }
+    } else {
+      console.log(chalk.green("\nNo concentration flags."));
+    }
   });
 
 program.parseAsync().catch((err) => {

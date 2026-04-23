@@ -1,7 +1,7 @@
 {
   "name": "financial-advisor-agent",
   "version": "0.1.0",
-  "description": "Autonomous Financial Advisor Agent — Phase 1: Market Intelligence Layer",
+  "description": "Autonomous Financial Advisor Agent — Phases 1 (market intel) & 2 (portfolio analytics)",
   "type": "module",
   "main": "dist/server.js",
   "scripts": {

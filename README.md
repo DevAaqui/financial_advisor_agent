@@ -1,13 +1,20 @@
-# Financial Advisor Agent — Phase 1: Market Intelligence Layer
+# Financial Advisor Agent — Phases 1 & 2
 
 Express + TypeScript backend for the **Autonomous Financial Advisor Agent** challenge.
-This repo implements **Phase 1** (Market Intelligence) end-to-end:
 
-1. **Trend Analysis** — derives Bullish / Bearish / Neutral sentiment from NIFTY 50 + SENSEX.
-2. **Sector Extraction** — dynamically ranks sector performance, cross-checks `sector_performance` against per-stock moves, tags sectors as rate-sensitive / defensive / cyclical / export-oriented.
-3. **News Processing** — indexes the pre-tagged news feed by **scope** (Market / Sector / Stock), **sentiment**, **impact level**, and **entities**; computes a numeric `strength` for downstream ranking.
+### Phase 1 — Market Intelligence
 
-> The provided news feed is already tagged with sentiment + scope + entities, so Phase 1 does not call any LLM. This keeps latency at a few milliseconds and saves budget for Phase 3 reasoning.
+1. **Trend Analysis** — Bullish / Bearish / Neutral from NIFTY 50 + SENSEX.
+2. **Sector Extraction** — sector moves, tags (rate-sensitive, defensive, …).
+3. **News Processing** — index pre-tagged news by scope, entities, impact; numeric `strength`.
+
+### Phase 2 — Portfolio Analytics
+
+1. **Daily P&L** — sum of `day_change` (₹); headline % vs prior-day portfolio value (matches mock `analytics.day_summary`).
+2. **Allocation** — direct stocks vs MFs; MF categories (equity / debt / hybrid / …); **sector look-through** via `mutual_funds.json` → `sector_allocation`.
+3. **Risk** — sector concentration (>40% / >70%), Banking+FS cluster, rate-sensitive exposure, single-name weight.
+
+> Phases 1–2 use **no LLM**. See [docs/phase1-explained.md](./docs/phase1-explained.md) and [docs/phase2-explained.md](./docs/phase2-explained.md).
 
 ---
 
@@ -40,15 +47,24 @@ financial_advisor_agent/
 │   │   ├── news.ts
 │   │   ├── sector.ts
 │   │   ├── historical.ts
+│   │   ├── portfolio.ts
+│   │   ├── mutualFund.ts
 │   │   └── index.ts
 │   ├── ingestion/               # ====  Phase 1  ====
-│   │   ├── dataLoader.ts        #  Loads & validates the 4 JSON sources
+│   │   ├── dataLoader.ts        #  Loads & validates JSON (Phase 1 + Phase 2 sources)
 │   │   ├── marketTrend.ts       #  Indices → overall market sentiment
 │   │   ├── sectorTrends.ts      #  Sector-level signals (+ classification)
 │   │   ├── newsProcessor.ts     #  Indexes news by scope / entity / impact
 │   │   └── phase1.ts            #  Orchestrator → MarketIntelligence
+│   ├── analytics/               # ====  Phase 2  ====
+│   │   ├── pnl.ts
+│   │   ├── allocation.ts
+│   │   ├── mfClassification.ts
+│   │   ├── risk.ts
+│   │   └── phase2.ts            #  runPhase2(portfolioId)
 │   └── api/
-│       └── phase1Routes.ts      #  /api/v1/phase1/* HTTP endpoints
+│       ├── phase1Routes.ts      #  /api/v1/phase1/*
+│       └── phase2Routes.ts      #  /api/v1/phase2/*
 ├── package.json
 ├── tsconfig.json
 └── .env.example
@@ -58,16 +74,18 @@ financial_advisor_agent/
 
 ## Data Sources
 
-Phase 1 reads four files from `DATA_DIR` (default: the parent folder):
+`loadAll()` reads from `DATA_DIR` (default: parent folder):
 
-| File                    | What it feeds                                         |
-| ----------------------- | ----------------------------------------------------- |
-| `market_data.json`      | Indices, sector performance, per-stock quotes         |
-| `news_data.json`        | Pre-tagged news articles                              |
-| `sector_mapping.json`   | Sector definitions, rate-sensitive / defensive tags   |
-| `historical_data.json`  | 7-day index/stock history, FII/DII flows, breadth     |
+| File                    | Phase(s) | Purpose |
+| ----------------------- | -------- | ------- |
+| `market_data.json`      | 1 | Indices, sectors, stocks |
+| `news_data.json`        | 1 | News feed |
+| `sector_mapping.json`   | 1, 2 | Sector tags; **rate-sensitive** list for risk |
+| `historical_data.json`  | 1 | History, breadth, FII/DII |
+| `portfolios.json`       | 2 | Three mock portfolios (`PORTFOLIO_001` … `003`) |
+| `mutual_funds.json`     | 2 | Scheme `sector_allocation` for MF look-through |
 
-All four files are validated with Zod at load time. Any schema drift produces a clear 400 with the exact Zod issues at `/api/v1/*`.
+All files are validated with Zod at load time.
 
 ---
 
@@ -94,28 +112,37 @@ npm start                   # one-shot
 You should see:
 
 ```
-Phase 1 API listening on http://localhost:3000
+API listening on http://localhost:3000 (phases 1 & 2)
 ```
 
-### Endpoints
+### Phase 1 endpoints
 
-| Method | Path                                            | Purpose                                                         |
-| ------ | ----------------------------------------------- | --------------------------------------------------------------- |
-| GET    | `/health`                                       | Liveness probe                                                  |
-| POST   | `/admin/reload`                                 | Invalidate in-memory cache (re-reads JSONs on next request)     |
-| GET    | `/api/v1/phase1`                                | Full market-intelligence bundle                                 |
-| GET    | `/api/v1/phase1/market`                         | Overall sentiment + per-index trends + breadth + FII/DII flows  |
-| GET    | `/api/v1/phase1/sectors`                        | All sectors, ranked by magnitude of day-move                    |
-| GET    | `/api/v1/phase1/sectors/:sector`                | Single sector details + ranked related news                     |
-| GET    | `/api/v1/phase1/news`                           | Complete news index: counts + by-scope / by-sentiment / by-entity |
-| GET    | `/api/v1/phase1/news/for-stock/:symbol`         | Stock / sector / market news for one symbol (ranked by strength) |
+| Method | Path | Purpose |
+| ------ | ---- | ------- |
+| GET | `/api/v1/phase1` | Full market-intelligence bundle |
+| GET | `/api/v1/phase1/market` | Sentiment, indices, breadth, flows |
+| GET | `/api/v1/phase1/sectors` | Sector ranking |
+| GET | `/api/v1/phase1/sectors/:sector` | Sector + news |
+| GET | `/api/v1/phase1/news` | News index |
+| GET | `/api/v1/phase1/news/for-stock/:symbol` | News for one stock |
+
+### Phase 2 endpoints
+
+| Method | Path | Purpose |
+| ------ | ---- | ------- |
+| GET | `/api/v1/phase2` | Index + example paths |
+| GET | `/api/v1/phase2/portfolios` | List mock portfolios |
+| GET | `/api/v1/phase2/:id` | Full P&L + allocation + risks |
+| GET | `/api/v1/phase2/:id/pnl` | P&L only |
+| GET | `/api/v1/phase2/:id/allocation` | Allocation only |
+| GET | `/api/v1/phase2/:id/risks` | Risk flags only |
 
 ### Quick checks
 
 ```bash
 curl -s http://localhost:3000/api/v1/phase1/market | jq .overallSentiment
-curl -s http://localhost:3000/api/v1/phase1/sectors | jq '.sectors[0]'
-curl -s http://localhost:3000/api/v1/phase1/news/for-stock/HDFCBANK | jq
+curl -s http://localhost:3000/api/v1/phase2/portfolios | jq
+curl -s http://localhost:3000/api/v1/phase2/PORTFOLIO_002 | jq .pnl
 ```
 
 ---
@@ -129,6 +156,8 @@ npm run cli -- market
 npm run cli -- sectors --top 10
 npm run cli -- news
 npm run cli -- news-for HDFCBANK
+npm run cli -- portfolios
+npm run cli -- portfolio PORTFOLIO_002
 ```
 
 Sample output (`market`):
@@ -159,11 +188,11 @@ Broad market declined (-0.99%): NIFTY 50 -1.00%, BSE SENSEX -0.99%. Notable dive
 - **News strength** = `0.7 × impact_weight + 0.3 × |sentiment_score|`. Higher-impact, stronger-signed stories bubble to the top of every lookup.
 - **Caching.** All JSONs are loaded once on first request. `POST /admin/reload` clears the cache without restarting.
 - **Validation error UX.** Zod errors surface as `400 { error, issues[] }` so schema drift is obvious in dev.
+- **Phase 2 P&L %** matches the mock convention: return vs **prior** portfolio value (`current_value - day_pnl`), not only vs current value. Both numbers are in the `pnl` object.
 
 ---
 
 ## Next Phases
 
-- Phase 2 will reuse `loadAll()` + the sector signal map to compute P&L, allocation, and concentration risk per portfolio.
-- Phase 3 will consume `NewsIndex.byStock` / `bySector` / `marketWide` as pre-ranked candidate signals before a single LLM reasoning call.
-- Phase 4 will wrap LLM calls in Langfuse tracing and grade the briefing's reasoning quality.
+- **Phase 3** — Causal narrative: merge Phase 1 + Phase 2 outputs; one (or two) LLM call(s) for the briefing.
+- **Phase 4** — Langfuse tracing + self-evaluation of reasoning quality.
