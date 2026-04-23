@@ -7,9 +7,9 @@ const EnvSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
   DATA_DIR: z.string().default("../"),
-  /** Required for LLM-generated briefings (Phase 3). If unset, a deterministic template is used. */
-  OPENAI_API_KEY: z.string().optional(),
-  OPENAI_MODEL: z.string().default("gpt-4o-mini"),
+  /** Required for LLM-generated briefings (Phase 3) via Google Gemini. If unset, a deterministic template is used. */
+  GEMINI_API_KEY: z.string().optional(),
+  GEMINI_MODEL: z.string().default("gemini-2.0-flash"),
 });
 
 const parsed = EnvSchema.parse(process.env);
@@ -28,6 +28,6 @@ export const config = {
   logLevel: parsed.LOG_LEVEL,
   dataDir,
   projectRoot,
-  openaiApiKey: parsed.OPENAI_API_KEY,
-  openaiModel: parsed.OPENAI_MODEL,
+  geminiApiKey: parsed.GEMINI_API_KEY,
+  geminiModel: parsed.GEMINI_MODEL,
 } as const;

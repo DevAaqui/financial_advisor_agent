@@ -15,7 +15,7 @@ phase3Router.get(
     res.json({
       description: "Phase 3 — Autonomous reasoning (causal briefing)",
       path: "GET /api/v1/phase3/:portfolioId",
-      note: "Set OPENAI_API_KEY for LLM. Query: ?mode=auto|llm|template (default auto). /cli: npm run cli -- advise ID --llm | --template",
+      note: "Set GEMINI_API_KEY for LLM. Query: ?mode=auto|llm|template (default auto). /cli: npm run cli -- advise ID --llm | --template",
     });
   })
 );
@@ -45,7 +45,7 @@ phase3Router.get(
         res.status(404).json({ error: msg });
         return;
       }
-      if (msg.includes("OPENAI_API_KEY") || msg.includes("LLM mode")) {
+      if (msg.includes("GEMINI_API_KEY") || msg.includes("LLM mode")) {
         res.status(400).json({ error: msg });
         return;
       }

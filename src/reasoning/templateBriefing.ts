@@ -51,6 +51,6 @@ export function buildTemplateBriefing(
     conflicts,
     key_drivers,
     limitations:
-      "Template mode (no OPENAI_API_KEY). Narrative is rule-based. Set OPENAI_API_KEY for a richer, judge-style briefing.",
+      "Template mode (no GEMINI_API_KEY). Narrative is rule-based. Set GEMINI_API_KEY for a richer, judge-style briefing.",
   };
 }

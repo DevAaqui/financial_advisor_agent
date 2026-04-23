@@ -44,7 +44,7 @@ export function createApp(): express.Express {
         "GET  /api/v1/phase2/portfolios",
         "GET  /api/v1/phase2/:id",
         "GET  /api/v1/phase2/:id/pnl | /allocation | /risks",
-        "GET  /api/v1/phase3/:id              # Causal briefing (set OPENAI_API_KEY for LLM)",
+        "GET  /api/v1/phase3/:id              # Causal briefing (set GEMINI_API_KEY for LLM)",
       ],
     });
   });

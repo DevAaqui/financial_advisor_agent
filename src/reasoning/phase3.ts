@@ -4,7 +4,7 @@ import { runPhase2 } from "../analytics/phase2.js";
 import { buildRankedSignals } from "./signals.js";
 import { computeReasoningConfidence } from "./confidence.js";
 import { buildTemplateBriefing } from "./templateBriefing.js";
-import { generateBriefingWithLlm } from "./llmBriefing.js";
+import { generateBriefingWithGemini } from "./geminiBriefing.js";
 import { config } from "../config.js";
 import type { Briefing } from "../schemas/briefing.js";
 
@@ -17,7 +17,7 @@ export type Phase3Result = {
   usedLlm: boolean;
   model?: string;
   usage?: { total_tokens?: number };
-  /** How the briefing was produced: default = OpenAI if key exists, else template. */
+  /** How the briefing was produced: default = Gemini if key exists, else template. */
   mode: "llm" | "template";
   meta: {
     signalCount: number;
@@ -28,8 +28,8 @@ export type Phase3Result = {
 
 export type Phase3RunOptions = {
   /**
-   * - `auto` — LLM when `OPENAI_API_KEY` is set, else template (default).
-   * - `llm` — require OpenAI; throws if no API key.
+   * - `auto` — LLM when `GEMINI_API_KEY` is set, else template (default).
+   * - `llm` — require Gemini; throws if no API key.
    * - `template` — rule-based briefing only; ignores API key.
    */
   mode?: "auto" | "llm" | "template";
@@ -38,9 +38,9 @@ export type Phase3RunOptions = {
 export async function runPhase3(portfolioId: string, options: Phase3RunOptions = {}): Promise<Phase3Result> {
   const id = portfolioId.toUpperCase();
   const modeOpt = options.mode ?? "auto";
-  if (modeOpt === "llm" && !config.openaiApiKey) {
+  if (modeOpt === "llm" && !config.geminiApiKey) {
     throw new Error(
-      "Phase 3 LLM mode requires OPENAI_API_KEY. Set it in .env or run: npm run cli -- advise " +
+      "Phase 3 LLM mode requires GEMINI_API_KEY. Set it in .env or run: npm run cli -- advise " +
         id +
         " --template"
     );
@@ -137,8 +137,8 @@ export async function runPhase3(portfolioId: string, options: Phase3RunOptions =
     };
   }
 
-  if (modeOpt === "llm" || (modeOpt === "auto" && config.openaiApiKey)) {
-    const { briefing, model, usage } = await generateBriefingWithLlm(context);
+  if (modeOpt === "llm" || (modeOpt === "auto" && config.geminiApiKey)) {
+    const { briefing, model, usage } = await generateBriefingWithGemini(context);
     return {
       portfolioId: id,
       asOf: p2.asOf,

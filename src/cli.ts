@@ -229,11 +229,11 @@ program
 program
   .command("advise")
   .description(
-    "Phase 3: causal briefing. Default: OpenAI when OPENAI_API_KEY is set, else template. Use --llm or --template to force."
+    "Phase 3: causal briefing. Default: Google Gemini when GEMINI_API_KEY is set, else template. Use --llm or --template to force."
   )
   .argument("<id>", "Portfolio id, e.g. PORTFOLIO_002")
   .option("--json", "Print full API JSON")
-  .option("--llm", "Force OpenAI briefing (errors if OPENAI_API_KEY is missing)")
+  .option("--llm", "Force Gemini briefing (errors if GEMINI_API_KEY is missing)")
   .option("--template", "Force rule-based template; ignore API key")
   .action(async (id: string, opts: { json?: boolean; llm?: boolean; template?: boolean }) => {
     if (opts.llm && opts.template) {
@@ -250,7 +250,7 @@ program
     console.log(chalk.bold.cyan(`\nBriefing — ${r.portfolioId}  (${r.asOf})\n`));
     console.log(
       chalk.gray(
-        `Mode: ${r.mode === "llm" ? `OpenAI (${r.model ?? "?"})` : "template (rule-based)"}  |  Confidence: ${r.confidence}  |  Signals: ${r.meta.signalCount}`
+        `Mode: ${r.mode === "llm" ? `Gemini (${r.model ?? "?"})` : "template (rule-based)"}  |  Confidence: ${r.confidence}  |  Signals: ${r.meta.signalCount}`
       )
     );
     console.log(chalk.bold("\n") + b.headline + "\n");

@@ -18,7 +18,7 @@ Express + TypeScript backend for the **Autonomous Financial Advisor Agent** chal
 
 1. **Signal ranking** — news × position weights (stocks + MF sector look-through); top signals only.
 2. **Conflicts** — stock/sector news vs same-day price when scope is not unrelated macro.
-3. **Briefing** — JSON: headline, summary, `why_portfolio_moved`, causal chains, conflicts, key drivers, limitations. **OpenAI** if `OPENAI_API_KEY` is set; else **template** output.
+3. **Briefing** — JSON: headline, summary, `why_portfolio_moved`, causal chains, conflicts, key drivers, limitations. **Google Gemini** if `GEMINI_API_KEY` is set; else **template** output.
 4. **Confidence** — deterministic score (not LLM-invented).
 
 > Phases 1–2 use **no LLM**. Phase 3 uses an LLM **optionally**. See [docs/phase1-explained.md](./docs/phase1-explained.md), [docs/phase2-explained.md](./docs/phase2-explained.md), [docs/phase3-explained.md](./docs/phase3-explained.md).
@@ -74,7 +74,7 @@ financial_advisor_agent/
 │   │   ├── signals.ts
 │   │   ├── confidence.ts
 │   │   ├── templateBriefing.ts
-│   │   ├── llmBriefing.ts
+│   │   ├── geminiBriefing.ts
 │   │   └── phase3.ts            #  runPhase3(portfolioId)
 │   └── api/
 │       ├── phase1Routes.ts      #  /api/v1/phase1/*
@@ -157,7 +157,7 @@ API listening on http://localhost:3000 (phases 1 & 2)
 | Method | Path | Purpose |
 | ------ | ---- | ------- |
 | GET | `/api/v1/phase3` | Index |
-| GET | `/api/v1/phase3/:id` | Causal briefing + confidence (`OPENAI_API_KEY` optional) |
+| GET | `/api/v1/phase3/:id` | Causal briefing + confidence (`GEMINI_API_KEY` optional) |
 
 ### Quick checks
 
@@ -182,7 +182,7 @@ npm run cli -- news-for HDFCBANK
 npm run cli -- portfolios
 npm run cli -- portfolio PORTFOLIO_002
 npm run cli -- advise PORTFOLIO_002
-npm run cli -- advise PORTFOLIO_002 --llm      # force OpenAI (needs OPENAI_API_KEY)
+npm run cli -- advise PORTFOLIO_002 --llm      # force Gemini (needs GEMINI_API_KEY)
 npm run cli -- advise PORTFOLIO_002 --template # force rule-based; no key
 ```
 

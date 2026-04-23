@@ -1,4 +1,4 @@
-import OpenAI from "openai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { config } from "../config.js";
 import { BriefingSchema, type Briefing } from "../schemas/briefing.js";
 import { logger } from "../observability/logger.js";
@@ -15,44 +15,53 @@ Rules:
 - key_drivers: string array, max 5 bullets.
 - limitations: when data is thin or MF look-through is approximate.`;
 
-export type LlmBundle = { briefing: Briefing; model: string; usage?: { total_tokens?: number } };
+export type GeminiBriefingBundle = {
+  briefing: Briefing;
+  model: string;
+  usage?: { total_tokens?: number };
+};
 
-export async function generateBriefingWithLlm(context: unknown): Promise<LlmBundle> {
-  if (!config.openaiApiKey) {
-    throw new Error("OPENAI_API_KEY is not set");
+export async function generateBriefingWithGemini(context: unknown): Promise<GeminiBriefingBundle> {
+  if (!config.geminiApiKey) {
+    throw new Error("GEMINI_API_KEY is not set");
   }
 
-  const openai = new OpenAI({ apiKey: config.openaiApiKey });
-  const completion = await openai.chat.completions.create({
-    model: config.openaiModel,
-    response_format: { type: "json_object" },
-    temperature: 0.35,
-    messages: [
-      { role: "system", content: SYSTEM },
-      {
-        role: "user",
-        content:
-          "Context JSON follows. Read it and produce the briefing JSON.\n\n" +
-          JSON.stringify(context, null, 2).slice(0, 100_000),
-      },
-    ],
+  const genAI = new GoogleGenerativeAI(config.geminiApiKey);
+  const model = genAI.getGenerativeModel({
+    model: config.geminiModel,
+    systemInstruction: SYSTEM,
+    generationConfig: {
+      temperature: 0.35,
+      responseMimeType: "application/json",
+    },
   });
 
-  const text = completion.choices[0]?.message?.content;
+  console.log("model EXECUTING>>>>>>>>>>>>>>>>>>>>>>>>>");
+
+  const userText =
+    "Context JSON follows. Read it and produce the briefing JSON.\n\n" +
+    JSON.stringify(context, null, 2).slice(0, 100_000);
+
+  const result = await model.generateContent(userText);
+  const text = result.response.text();
+  console.log("TEXT>>>>>>>>>>>>>>>>>>>>>>>>>", text);
   if (!text) {
+    console.log("EMPTY LLM RESPONSE>>>>>>>>>>>>>>>>>>>>>>>>>");
     throw new Error("Empty LLM response");
   }
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch (e) {
+    console.log("ERROR PARSING JSON>>>>>>>>>>>>>>>>>>>>>>>>>", e);
     logger.error({ text: text.slice(0, 500) }, "LLM did not return valid JSON");
     throw e;
   }
   const briefing = BriefingSchema.parse(parsed);
+  const u = result.response.usageMetadata;
   return {
     briefing,
-    model: config.openaiModel,
-    usage: completion.usage ? { total_tokens: completion.usage.total_tokens } : undefined,
+    model: config.geminiModel,
+    usage: u ? { total_tokens: u.totalTokenCount } : undefined,
   };
 }
