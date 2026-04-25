@@ -2,6 +2,8 @@ import { loadAll } from "../ingestion/dataLoader.js";
 import { computePortfolioPnl, type PortfolioPnL } from "./pnl.js";
 import { computeAllocation, type AssetTypeBreakdown, type SectorAllocation } from "./allocation.js";
 import { detectRisks, type RiskFlag } from "./risk.js";
+
+/** One portfolio’s analytics: profile, P&L, allocation (incl. MF look-through), and heuristic risk flags. */
 export type PortfolioAnalytics = {
   portfolioId: string;
   asOf: string;
@@ -21,6 +23,9 @@ export type PortfolioAnalytics = {
   risks: RiskFlag[];
 };
 
+/**
+ * Phase 2 — build analytics for a single portfolio: load data, validate id, then P&L, allocation, and risk rules.
+ */
 export async function runPhase2(portfolioId: string): Promise<PortfolioAnalytics> {
   const { market, portfoliosFile, mutualFundsFile, sectorMap } = await loadAll();
   const record = portfoliosFile.portfolios[portfolioId];
@@ -60,10 +65,12 @@ export async function runPhase2(portfolioId: string): Promise<PortfolioAnalytics
   };
 }
 
+/** Sorted list of portfolio keys from a loaded `portfolios.json` (used for 404 messages and UIs). */
 export function listPortfolioIds(portfoliosFile: { portfolios: Record<string, unknown> }): string[] {
   return Object.keys(portfoliosFile.portfolios).sort();
 }
 
+/** Lightweight table of every portfolio: id, display name, type, and current value (for list endpoints). */
 export async function listPortfoliosMeta(): Promise<
   Array<{
     id: string;

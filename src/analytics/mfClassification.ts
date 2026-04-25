@@ -15,6 +15,7 @@ const DEBT_CATEGORIES = new Set([
 
 const HYBRID_CATEGORIES = new Set(["BALANCED_ADVANTAGE", "AGGRESSIVE_HYBRID", "CONSERVATIVE_HYBRID"]);
 
+/** Map a scheme `category` string to a coarse asset bucket (equity / debt / hybrid / …) for the allocation pie. */
 export function classifyMutualFund(category: string): MfAssetBucket {
   const c = category.toUpperCase();
   if (DEBT_CATEGORIES.has(c) || c.includes("BOND") || c.includes("GILT")) return "DEBT_MF";

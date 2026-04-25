@@ -18,17 +18,21 @@ const RATE_SENSITIVE_WARN_PCT = 50;
 /** Residual buckets from MF look-through — not a "single economic sector" bet. */
 const NON_ECONOMIC_SECTORS = new Set(["DIVERSIFIED_MF", "CASH", "OTHERS", "DEBT_FUNDS"]);
 
-/** Banking + FS often move together on RBI / rate news — treat as one cluster for concentration. */
+/** Sum BANKING + FINANCIAL_SERVICES weights (they often move together on RBI / rate news). */
 function bankingClusterPct(sectors: Record<string, number>): number {
   const b = sectors.BANKING ?? sectors["BANKING"] ?? 0;
   const f = sectors.FINANCIAL_SERVICES ?? sectors["FINANCIAL_SERVICES"] ?? 0;
   return b + f;
 }
 
+/** Sectors with meaningful “economic” concentration (excludes residual MF/cash buckets). */
 function economicSectors(sectors: Record<string, number>): [string, number][] {
   return Object.entries(sectors).filter(([k]) => !NON_ECONOMIC_SECTORS.has(k));
 }
 
+/**
+ * Rule-based risk flags: sector / banking cluster / rate sensitivity / single-name weight vs thresholds in `sectorMap`.
+ */
 export function detectRisks(
   bySectorWithFunds: Record<string, number>,
   singleStockWeights: Array<{ symbol: string; weight: number }>,

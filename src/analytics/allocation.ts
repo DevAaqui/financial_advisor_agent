@@ -19,11 +19,15 @@ export type SectorAllocation = {
   bySectorWithFunds: Record<string, number>;
 };
 
+/** Add `w` to `map[key]` (uppercased) — used when rolling up sector weights. */
 function addTo(map: Record<string, number>, key: string, w: number): void {
   const k = key.toUpperCase();
   map[k] = (map[k] ?? 0) + w;
 }
 
+/**
+ * Direct stock weights by sector, MF category split, and look-through sector weights using `mutual_funds.json` sector_allocation.
+ */
 export function computeAllocation(
   stocks: StockHolding[],
   mutualFunds: MFHolding[],

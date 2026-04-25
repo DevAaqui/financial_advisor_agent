@@ -21,6 +21,7 @@ function serializeNewsIndex(idx: NewsIndex) {
 
 export const phase1Router: Router = Router();
 
+/** Wrap an async route so rejections are passed to Express `next` (avoids unhandled rejections). */
 const asyncRoute =
   (fn: (req: Request, res: Response) => Promise<unknown>) =>
   (req: Request, res: Response, next: NextFunction) => {

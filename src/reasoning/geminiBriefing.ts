@@ -25,6 +25,10 @@ export type GeminiBriefingBundle = {
   langfuseTraceUrl?: string;
 };
 
+/**
+ * Call Gemini with the Phase 3 system prompt, parse JSON, validate with `BriefingSchema`,
+ * and optionally record a Langfuse trace + generation.
+ */
 export async function generateBriefingWithGemini(
   context: unknown,
   options: { portfolioId: string }

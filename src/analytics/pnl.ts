@@ -28,6 +28,7 @@ export type PortfolioPnL = {
   topDayLosers: HoldingPnlLine[];
 };
 
+/** Map a direct stock row from `portfolios.json` into a uniform P&L line for sorting and display. */
 function lineFromStock(s: StockHolding): HoldingPnlLine {
   return {
     kind: "STOCK",
@@ -40,6 +41,7 @@ function lineFromStock(s: StockHolding): HoldingPnlLine {
   };
 }
 
+/** Same as `lineFromStock` for an MF holding row. */
 function lineFromMf(m: MFHolding): HoldingPnlLine {
   return {
     kind: "MF",
@@ -52,6 +54,9 @@ function lineFromMf(m: MFHolding): HoldingPnlLine {
   };
 }
 
+/**
+ * Aggregate one portfolio’s day P&L from stock + MF `day_change` fields: totals, % vs prior value, and top movers.
+ */
 export function computePortfolioPnl(
   currentValue: number,
   stocks: StockHolding[],

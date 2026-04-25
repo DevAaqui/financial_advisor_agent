@@ -3,6 +3,10 @@ import type { PortfolioAnalytics } from "../analytics/phase2.js";
 import type { MarketIntelligence } from "../ingestion/phase1.js";
 import type { ConflictSeed, RankedSignal } from "./signals.js";
 
+/**
+ * Assemble a `Briefing` from Phase 1/2 + ranked signals with fixed phrasing (no LLM).
+ * Used when `mode=template` or when Gemini is unavailable / not allowlisted.
+ */
 export function buildTemplateBriefing(
   p1: MarketIntelligence,
   p2: PortfolioAnalytics,

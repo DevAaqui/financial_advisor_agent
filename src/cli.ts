@@ -11,6 +11,7 @@ import { flushLangfuse } from "./observability/langfuseClient.js";
 import { consumeAdviseRateLimitIfEnabled, quitCliRateLimitRedis } from "./rateLimit/cliAdviseRateLimit.js";
 import { isUserAllowedForLlm } from "./reasoning/adviseLlmAccess.js";
 
+// Root CLI: binary name, global description, and --version; subcommands are registered below.
 const program = new Command();
 
 program
@@ -18,17 +19,20 @@ program
   .description("Financial Advisor Agent — Phases 1–4 CLI")
   .version("0.1.0");
 
+/** Colors a sentiment label for terminal output: positive in green, negative in red, else yellow. */
 function sentimentChalk(s: string): string {
   if (s === "BULLISH" || s === "POSITIVE") return chalk.green(s);
   if (s === "BEARISH" || s === "NEGATIVE") return chalk.red(s);
   return chalk.yellow(s);
 }
 
+/** Formats a number as a signed percent string (e.g. `+1.20%`) and colors it green / red / yellow by sign. */
 function pct(n: number): string {
   const s = `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
   return n > 0 ? chalk.green(s) : n < 0 ? chalk.red(s) : chalk.yellow(s);
 }
 
+// Phase 1: print broad market read (indices, optional breadth & FII/DII flows) from `runPhase1()`.
 program
   .command("market")
   .description("Show market trend analysis")
@@ -76,6 +80,7 @@ program
     }
   });
 
+// Phase 1: print sector table (day/weekly %, tags, top gainers/losers); limit rows with --top.
 program
   .command("sectors")
   .description("Show sector trend analysis")
@@ -110,6 +115,7 @@ program
     console.log(t.toString());
   });
 
+// Phase 1: print news index rollups and the five highest-strength headlines.
 program
   .command("news")
   .description("Show news index summary")
@@ -141,6 +147,7 @@ program
     console.log(t.toString());
   });
 
+// Phase 1: resolve symbol → sector, then show ranked news buckets (stock / sector / market) via `newsForStock`.
 program
   .command("news-for")
   .description("Show ranked news relevant to a stock symbol")
@@ -173,6 +180,7 @@ program
     }
   });
 
+// List mock portfolio ids with investor name, type, and notional value (no full analytics).
 program
   .command("portfolios")
   .description("List available mock portfolio IDs")
@@ -185,6 +193,7 @@ program
     console.log(t.toString());
   });
 
+// Phase 2: full analytics for one portfolio (P&L, allocation, sector look-through, risk flags); --json for raw object.
 program
   .command("portfolio")
   .description("Show Phase 2 portfolio analytics (P&L, allocation, risks)")
@@ -230,6 +239,7 @@ program
     }
   });
 
+// Phase 3: causal briefing for a portfolio (LLM or template), allowlist / rate limit / Langfuse; --json for full payload.
 program
   .command("advise")
   .description(
@@ -325,6 +335,7 @@ program
     }
   });
 
+// Parse argv, dispatch the matching subcommand, flush Langfuse traces, then exit 0; on error print message and exit 1.
 program
   .parseAsync()
   .then(() => flushLangfuse())

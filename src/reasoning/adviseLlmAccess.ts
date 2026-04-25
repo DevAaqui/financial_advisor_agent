@@ -1,6 +1,6 @@
 /**
- * If allowlist is empty, everyone may use the LLM path (only `GEMINI_API_KEY` gating).
- * If non-empty, `userEmail` must match a list entry (case-insensitive).
+ * Whether the caller may use the Gemini path for Phase 3. Empty allowlist = unrestricted
+ * (still need `GEMINI_API_KEY`); otherwise email must be on the list (case-insensitive).
  */
 export function isUserAllowedForLlm(
   userEmail: string | undefined,

@@ -32,17 +32,20 @@ export type ConflictSeed = {
   note: string;
 };
 
+/** Today’s % move for a sector from Phase 1 sector trends (for signal context). */
 function sectorDayChange(sectorTrends: SectorTrendsOutput, sector: string): number | undefined {
   const s = sectorTrends.sectors.find((x) => x.sector === sector.toUpperCase());
   return s?.changePercent;
 }
 
+/** Today’s % move for a stock from `market.stocks`, or a holding-level fallback. */
 function stockDayChange(market: MarketData, symbol: string, fallback?: number): number | undefined {
   const q = market.stocks[symbol.toUpperCase()];
   if (q) return q.change_percent;
   return fallback;
 }
 
+/** From `n.scope`: MARKET_WIDE → MARKET, else STOCK (MF sector rows set `SECTOR_MF` at the call site). */
 function linkKind(n: EnrichedNewsItem): "STOCK" | "SECTOR_MF" | "MARKET" {
   if (n.scope === "MARKET_WIDE") return "MARKET";
   if (n.scope === "STOCK_SPECIFIC") return "STOCK";
@@ -59,6 +62,7 @@ type SignalPartial = Pick<
   | "sectorDayChangePercent"
 >;
 
+/** Keep the best `relevanceScore` per `newsId` when the same story could match multiple links. */
 function upsertSignal(
   best: Map<string, RankedSignal>,
   n: EnrichedNewsItem,
@@ -82,6 +86,10 @@ function upsertSignal(
   }
 }
 
+/**
+ * For each stock and top MF sector sleeves, join news to positions with a weight-based score;
+ * return top signals plus headline-vs-price `conflictSeeds` for the briefing.
+ */
 export function buildRankedSignals(
   newsIndex: NewsIndex,
   market: MarketData,

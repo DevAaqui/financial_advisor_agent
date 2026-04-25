@@ -19,6 +19,7 @@ export type ReasoningQualityInput = {
 const NEGATIVE_PNL = /(declin|fall|fell|down|negat|pressur|drift|drop|loss|losses|weak|bear|red|lower|shed|tight|strain|underperform)/i;
 const POSITIVE_PNL = /(gain|gains|up|posit|rise|rose|tailwind|rally|strong|bull|higher|green|advance|rebound|beat)/i;
 
+/** Ensure headline, summary, and `why_portfolio_moved` are non-empty. */
 function checkNonemptyCore(b: Briefing): ReasoningQualityCheck {
   const ok =
     b.headline.trim().length > 0 &&
@@ -27,6 +28,7 @@ function checkNonemptyCore(b: Briefing): ReasoningQualityCheck {
   return { name: "nonempty_core", passed: ok, detail: ok ? undefined : "headline, summary, or why_portfolio_moved is empty" };
 }
 
+/** Enforce at most five key_drivers (matches Gemini contract). */
 function checkKeyDriversCap(b: Briefing): ReasoningQualityCheck {
   const ok = b.key_drivers.length <= 5;
   return {
@@ -36,6 +38,7 @@ function checkKeyDriversCap(b: Briefing): ReasoningQualityCheck {
   };
 }
 
+/** Every `news_id` in causal_chains must exist in the ranked-signal set (no invented ids). */
 function checkNewsIdGrounding(b: Briefing, validNewsIds: Set<string>): ReasoningQualityCheck {
   const bad: string[] = [];
   for (const c of b.causal_chains) {
@@ -51,6 +54,7 @@ function checkNewsIdGrounding(b: Briefing, validNewsIds: Set<string>): Reasoning
   return { name: "news_id_grounding", passed: false, detail: `unknown news_ids: ${[...new Set(bad)].slice(0, 5).join(", ")}` };
 }
 
+/** If the engine found conflict seeds, the briefing should list at least one conflict. */
 function checkConflictAck(b: Briefing, conflictSeedCount: number): ReasoningQualityCheck {
   if (conflictSeedCount < 1) {
     return { name: "conflict_ack", passed: true, detail: "no conflict seeds" };
@@ -63,6 +67,7 @@ function checkConflictAck(b: Briefing, conflictSeedCount: number): ReasoningQual
   };
 }
 
+/** Headline + summary + why text should use language consistent with the sign of day P&L. */
 function checkPnlTone(b: Briefing, dayPnlRupees: number): ReasoningQualityCheck {
   const t = " ".concat(b.headline, " ", b.summary, " ", b.why_portfolio_moved);
   if (Math.abs(dayPnlRupees) < 1e-6) {
@@ -84,6 +89,7 @@ function checkPnlTone(b: Briefing, dayPnlRupees: number): ReasoningQualityCheck 
   };
 }
 
+/** If there are no ranked signals, `limitations` should call out thin data. */
 function checkThinData(b: Briefing, signalCount: number): ReasoningQualityCheck {
   if (signalCount > 0) {
     return { name: "thin_data", passed: true };

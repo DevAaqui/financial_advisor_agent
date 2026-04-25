@@ -50,6 +50,7 @@ export type Phase3RunOptions = {
   userEmail?: string;
 };
 
+/** Run `evaluateReasoningQuality` and, when Langfuse is on, post a `reasoning_quality` score on the trace. */
 async function attachPhase4(
   briefing: Briefing,
   signals: RankedSignal[],
@@ -90,12 +91,18 @@ async function attachPhase4(
   };
 }
 
+/**
+ * Phase 3 end-to-end: P1+P2, ranked signals, confidence, then template or Gemini briefing and Phase 4 quality.
+ * Numbered `// 1.` … `// 8c` comments inside describe each step.
+ */
 export async function runPhase3(portfolioId: string, options: Phase3RunOptions = {}): Promise<Phase3Result> {
+  // 1. Normalize id, resolve mode (auto | llm | template), and whether this caller may use Gemini (allowlist).
   const id = portfolioId.toUpperCase();
   const modeOpt = options.mode ?? "auto";
   const userEmail = options.userEmail;
   const allowLlm = isUserAllowedForLlm(userEmail, config.adviseLlmAllowlist);
 
+  // 2. Fail fast when LLM is required or allowed by mode but identity/key policy blocks it.
   if (modeOpt === "llm" && !config.geminiApiKey) {
     throw new Error(
       "Phase 3 LLM mode requires GEMINI_API_KEY. Set it in .env or run: npm run cli -- advise " +
@@ -111,6 +118,7 @@ export async function runPhase3(portfolioId: string, options: Phase3RunOptions =
     );
   }
 
+  // 3. Ingestion + analytics: Phase 1 (market/news) and Phase 2 (this portfolio) in parallel; load raw JSON and look up the portfolio row.
   const [p1, p2] = await Promise.all([runPhase1(), runPhase2(id)]);
   const { market, mutualFundsFile, portfoliosFile } = await loadAll();
   const record = portfoliosFile.portfolios[id];
@@ -118,6 +126,7 @@ export async function runPhase3(portfolioId: string, options: Phase3RunOptions =
     throw new Error(`Portfolio '${id}' not found.`);
   }
 
+  // 4. Reasoning inputs: rank news against holdings (signals) and surface headline vs price conflict seeds.
   const { signals, conflictSeeds } = buildRankedSignals(
     p1.newsIndex,
     market,
@@ -126,9 +135,11 @@ export async function runPhase3(portfolioId: string, options: Phase3RunOptions =
     p1.sectorTrends
   );
 
+  // 5. Scalar reasoning quality hint: critical risk count + confidence from signals/conflicts.
   const criticalRiskCount = p2.risks.filter((r) => r.severity === "CRITICAL").length;
   const confidence = computeReasoningConfidence(signals, conflictSeeds.length, criticalRiskCount);
 
+  // 6. Payload for optional Gemini: structured portfolio, P&L, allocation, risks, market, ranked signals, conflicts, confidence.
   const context = {
     portfolio: {
       id,
@@ -182,6 +193,7 @@ export async function runPhase3(portfolioId: string, options: Phase3RunOptions =
     confidenceHint: confidence,
   };
 
+  // 7. Response metadata common to all branches.
   const generatedAt = new Date().toISOString();
   const meta = {
     signalCount: signals.length,
@@ -189,6 +201,7 @@ export async function runPhase3(portfolioId: string, options: Phase3RunOptions =
     criticalRiskCount,
   };
 
+  // 8a. Forced template: deterministic briefing, then Phase 4 quality scores.
   if (modeOpt === "template") {
     const briefing = buildTemplateBriefing(p1, p2, signals, conflictSeeds);
     const p4 = await attachPhase4(briefing, signals, conflictSeeds, p2.pnl.dayPnlRupees);
@@ -205,6 +218,7 @@ export async function runPhase3(portfolioId: string, options: Phase3RunOptions =
     };
   }
 
+  // 8b. Gemini path: key present, caller allowed, and mode is auto or llm — generate JSON briefing, optional Langfuse trace, Phase 4.
   if (config.geminiApiKey && allowLlm && (modeOpt === "llm" || modeOpt === "auto")) {
     const { briefing, model, usage, langfuseTraceId, langfuseTraceUrl } = await generateBriefingWithGemini(
       context,
@@ -233,6 +247,7 @@ export async function runPhase3(portfolioId: string, options: Phase3RunOptions =
     };
   }
 
+  // 8c. Fallback template: auto without key, or allowlist denied under auto — same as 8a but implied by configuration.
   const briefing = buildTemplateBriefing(p1, p2, signals, conflictSeeds);
   const p4 = await attachPhase4(briefing, signals, conflictSeeds, p2.pnl.dayPnlRupees);
   return {

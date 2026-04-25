@@ -4,6 +4,7 @@ import { listPortfoliosMeta, runPhase2 } from "../analytics/phase2.js";
 
 export const phase2Router: Router = Router();
 
+/** Wrap an async route so rejections are passed to Express `next` (avoids unhandled rejections). */
 const asyncRoute =
   (fn: (req: Request, res: Response) => Promise<unknown>) =>
   (req: Request, res: Response, next: NextFunction) => {
