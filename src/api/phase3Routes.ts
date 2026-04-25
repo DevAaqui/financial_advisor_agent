@@ -1,5 +1,6 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { runPhase3, type Phase3RunOptions } from "../reasoning/phase3.js";
+import { config } from "../config.js";
 
 export const phase3Router: Router = Router();
 
@@ -16,7 +17,7 @@ phase3Router.get(
       description: "Phase 3 — Autonomous reasoning (causal briefing)",
       path: "GET /api/v1/phase3/:portfolioId",
       note:
-        "Response includes Phase 4: reasoningQuality (rules) + optional Langfuse (LANGFUSE_* + GEMINI_API_KEY for traces). Query: ?mode=auto|llm|template. CLI: npm run cli -- advise ID --llm | --template",
+        "LLM: ADVISE_LLM_ALLOWLIST + explicit identity. When the list is set: X-Adviser-User-Email or ?userEmail= (no ADVISE_USER_EMAIL fallback). When the list is empty, ADVISE_USER_EMAIL may be used. Phase 4 + Langfuse. ?mode=auto|llm|template",
     });
   })
 );
@@ -38,12 +39,24 @@ phase3Router.get(
       return;
     }
     try {
-      const result = await runPhase3(id, { mode: m });
+      const q = req.query.userEmail;
+      const fromHeader = req.get("X-Adviser-User-Email")?.trim();
+      const fromQuery = typeof q === "string" ? q.trim() : undefined;
+      const fromRequest = fromHeader || fromQuery || undefined;
+      const hasAllowlist = config.adviseLlmAllowlist.length > 0;
+      const userEmail = hasAllowlist
+        ? fromRequest
+        : fromRequest || config.adviseUserEmail?.trim() || undefined;
+      const result = await runPhase3(id, { mode: m, userEmail });
       res.json(result);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (msg.includes("not found")) {
         res.status(404).json({ error: msg });
+        return;
+      }
+      if (msg.includes("ADVISE_LLM_ALLOWLIST") || msg.includes("LLM advise is limited")) {
+        res.status(403).json({ error: msg });
         return;
       }
       if (msg.includes("GEMINI_API_KEY") || msg.includes("LLM mode")) {

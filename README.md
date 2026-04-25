@@ -173,6 +173,8 @@ curl -s http://localhost:3000/api/v1/phase1/market | jq .overallSentiment
 curl -s http://localhost:3000/api/v1/phase2/portfolios | jq
 curl -s http://localhost:3000/api/v1/phase2/PORTFOLIO_002 | jq .pnl
 curl -s http://localhost:3000/api/v1/phase3/PORTFOLIO_002 | jq .briefing.headline
+# If ADVISE_LLM_ALLOWLIST is set, pass identity on each request, e.g.
+# curl -s -H "X-Adviser-User-Email: alice@co.com" "http://localhost:3000/api/v1/phase3/PORTFOLIO_002?mode=llm" | jq .briefing.headline
 ```
 
 ---
@@ -191,6 +193,8 @@ npm run cli -- portfolio PORTFOLIO_002
 npm run cli -- advise PORTFOLIO_002
 npm run cli -- advise PORTFOLIO_002 --llm      # force Gemini (needs GEMINI_API_KEY)
 npm run cli -- advise PORTFOLIO_002 --template # force rule-based; no key
+npm run cli -- advise PORTFOLIO_002 --as alice@co.com --llm
+# If ADVISE_LLM_ALLOWLIST is set in .env, add: --as you@co.com  (address must be on the list)
 ```
 
 Sample output (`market`):

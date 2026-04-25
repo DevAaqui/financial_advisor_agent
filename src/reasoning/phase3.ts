@@ -10,6 +10,7 @@ import { flushLangfuse, getLangfuseClient } from "../observability/langfuseClien
 import { config } from "../config.js";
 import type { Briefing } from "../schemas/briefing.js";
 import type { RankedSignal, ConflictSeed } from "./signals.js";
+import { isUserAllowedForLlm } from "./adviseLlmAccess.js";
 
 export type Phase3Result = {
   portfolioId: string;
@@ -42,6 +43,11 @@ export type Phase3RunOptions = {
    * - `template` — rule-based briefing only; ignores API key.
    */
   mode?: "auto" | "llm" | "template";
+  /**
+   * Who is calling: must match `ADVISE_LLM_ALLOWLIST` when that list is set.
+   * CLI: `--as` (required when the list is set). HTTP: `X-Adviser-User-Email` or `?userEmail=`; when the list is set there is no `ADVISE_USER_EMAIL` fallback. When the list is empty, `ADVISE_USER_EMAIL` in config may supply identity for the API.
+   */
+  userEmail?: string;
 };
 
 async function attachPhase4(
@@ -87,11 +93,21 @@ async function attachPhase4(
 export async function runPhase3(portfolioId: string, options: Phase3RunOptions = {}): Promise<Phase3Result> {
   const id = portfolioId.toUpperCase();
   const modeOpt = options.mode ?? "auto";
+  const userEmail = options.userEmail;
+  const allowLlm = isUserAllowedForLlm(userEmail, config.adviseLlmAllowlist);
+
   if (modeOpt === "llm" && !config.geminiApiKey) {
     throw new Error(
       "Phase 3 LLM mode requires GEMINI_API_KEY. Set it in .env or run: npm run cli -- advise " +
         id +
         " --template"
+    );
+  }
+  if (modeOpt === "llm" && config.geminiApiKey && !allowLlm) {
+    throw new Error(
+      "LLM advise is limited to emails in ADVISE_LLM_ALLOWLIST. For the CLI: npm run cli -- advise <id> --as you@co.com ...  (or set ADVISE_USER_EMAIL only when the allowlist is empty). " +
+        "For the API: send the X-Adviser-User-Email header or ?userEmail= (required on each request when the allowlist is set; ADVISE_USER_EMAIL is not used as a server-side default). " +
+        "Or use --template (CLI) / mode=template (API)."
     );
   }
 
@@ -189,7 +205,7 @@ export async function runPhase3(portfolioId: string, options: Phase3RunOptions =
     };
   }
 
-  if (modeOpt === "llm" || (modeOpt === "auto" && config.geminiApiKey)) {
+  if (config.geminiApiKey && allowLlm && (modeOpt === "llm" || modeOpt === "auto")) {
     const { briefing, model, usage, langfuseTraceId, langfuseTraceUrl } = await generateBriefingWithGemini(
       context,
       { portfolioId: id }

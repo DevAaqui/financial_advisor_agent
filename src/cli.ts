@@ -6,7 +6,10 @@ import { newsForStock } from "./ingestion/newsProcessor.js";
 import { loadAll } from "./ingestion/dataLoader.js";
 import { listPortfoliosMeta, runPhase2 } from "./analytics/phase2.js";
 import { runPhase3 } from "./reasoning/phase3.js";
+import { config } from "./config.js";
 import { flushLangfuse } from "./observability/langfuseClient.js";
+import { consumeAdviseRateLimitIfEnabled, quitCliRateLimitRedis } from "./rateLimit/cliAdviseRateLimit.js";
+import { isUserAllowedForLlm } from "./reasoning/adviseLlmAccess.js";
 
 const program = new Command();
 
@@ -236,52 +239,89 @@ program
   .option("--json", "Print full API JSON")
   .option("--llm", "Force Gemini briefing (errors if GEMINI_API_KEY is missing)")
   .option("--template", "Force rule-based template; ignore API key")
-  .action(async (id: string, opts: { json?: boolean; llm?: boolean; template?: boolean }) => {
+  .option(
+    "--as <email>",
+    "Who is calling (required when ADVISE_LLM_ALLOWLIST is set; must be one of those emails)"
+  )
+  .action(
+    async (
+      id: string,
+      opts: { json?: boolean; llm?: boolean; template?: boolean; as?: string }
+    ) => {
     if (opts.llm && opts.template) {
       console.error(chalk.red("Use only one of --llm or --template."));
       process.exit(1);
     }
     const mode = opts.llm ? "llm" : opts.template ? "template" : "auto";
-    const r = await runPhase3(id, { mode });
-    if (opts.json) {
-      console.log(JSON.stringify(r, null, 2));
-      return;
-    }
-    const b = r.briefing;
-    console.log(chalk.bold.cyan(`\nBriefing — ${r.portfolioId}  (${r.asOf})\n`));
-    console.log(
-      chalk.gray(
-        `Mode: ${r.mode === "llm" ? `Gemini (${r.model ?? "?"})` : "template (rule-based)"}  |  Confidence: ${r.confidence}  |  Signals: ${r.meta.signalCount}  |  Reasoning quality: ${r.reasoningQuality.score} (${r.reasoningQuality.method})`
-      )
-    );
-    if (r.observability?.langfuse) {
-      console.log(chalk.gray(`Langfuse trace: ${r.observability.langfuse.traceId}`));
-      if (r.observability.langfuse.traceUrl) {
-        console.log(chalk.gray(`  ${r.observability.langfuse.traceUrl}`));
+    const asFlag = typeof opts.as === "string" ? opts.as.trim() : undefined;
+    let userEmail: string | undefined;
+    if (config.adviseLlmAllowlist.length > 0) {
+      if (!asFlag) {
+        console.error(
+          chalk.red(
+            "You must be an authorised person to execute this command. Please provide your email address."
+            // "When ADVISE_LLM_ALLOWLIST is set, you must pass your email on the command line, e.g. npm run cli -- advise PORTFOLIO_002 --as alice@co.com --llm  (use an address that appears in ADVISE_LLM_ALLOWLIST)"
+          )
+        );
+        process.exit(1);
       }
-    } else if (r.observability?.langfuse === null) {
-      console.log(chalk.gray("(Langfuse configured; no LLM trace this run — template mode)"));
-    }
-    console.log(chalk.bold("\n") + b.headline + "\n");
-    console.log(b.summary + "\n");
-    console.log(chalk.bold("Why it moved:"));
-    console.log(b.why_portfolio_moved + "\n");
-    if (b.causal_chains.length > 0) {
-      console.log(chalk.bold("Causal links:"));
-      b.causal_chains.forEach((c, i) => console.log(`  ${i + 1}. ${c.text}`));
-    }
-    if (b.conflicts.length > 0) {
-      console.log(chalk.bold.yellow("\nConflicts / nuance:"));
-      for (const c of b.conflicts) {
-        console.log(`  • ${c.description}\n    → ${c.how_to_read_it}`);
+      if (!isUserAllowedForLlm(asFlag, config.adviseLlmAllowlist)) {
+        console.error(
+          chalk.red(
+            `--as ${asFlag} is not in ADVISE_LLM_ALLOWLIST. Only allowlisted users may run advise.`
+          )
+        );
+        process.exit(1);
       }
+      userEmail = asFlag;
+    } else {
+      userEmail = asFlag || config.adviseUserEmail?.trim() || undefined;
     }
-    if (b.key_drivers.length > 0) {
-      console.log(chalk.bold("\nKey drivers:"));
-      b.key_drivers.forEach((k) => console.log(`  - ${k}`));
-    }
-    if (b.limitations) {
-      console.log(chalk.gray(`\nNote: ${b.limitations}`));
+    try {
+      await consumeAdviseRateLimitIfEnabled();
+      const r = await runPhase3(id, { mode, userEmail });
+      if (opts.json) {
+        console.log(JSON.stringify(r, null, 2));
+        return;
+      }
+      const b = r.briefing;
+      console.log(chalk.bold.cyan(`\nBriefing — ${r.portfolioId}  (${r.asOf})\n`));
+      console.log(
+        chalk.gray(
+          `Mode: ${r.mode === "llm" ? `Gemini (${r.model ?? "?"})` : "template (rule-based)"}  |  Confidence: ${r.confidence}  |  Signals: ${r.meta.signalCount}  |  Reasoning quality: ${r.reasoningQuality.score} (${r.reasoningQuality.method})`
+        )
+      );
+      if (r.observability?.langfuse) {
+        console.log(chalk.gray(`Langfuse trace: ${r.observability.langfuse.traceId}`));
+        if (r.observability.langfuse.traceUrl) {
+          console.log(chalk.gray(`  ${r.observability.langfuse.traceUrl}`));
+        }
+      } else if (r.observability?.langfuse === null) {
+        console.log(chalk.gray("(Langfuse configured; no LLM trace this run — template mode)"));
+      }
+      console.log(chalk.bold("\n") + b.headline + "\n");
+      console.log(b.summary + "\n");
+      console.log(chalk.bold("Why it moved:"));
+      console.log(b.why_portfolio_moved + "\n");
+      if (b.causal_chains.length > 0) {
+        console.log(chalk.bold("Causal links:"));
+        b.causal_chains.forEach((c, i) => console.log(`  ${i + 1}. ${c.text}`));
+      }
+      if (b.conflicts.length > 0) {
+        console.log(chalk.bold.yellow("\nConflicts / nuance:"));
+        for (const c of b.conflicts) {
+          console.log(`  • ${c.description}\n    → ${c.how_to_read_it}`);
+        }
+      }
+      if (b.key_drivers.length > 0) {
+        console.log(chalk.bold("\nKey drivers:"));
+        b.key_drivers.forEach((k) => console.log(`  - ${k}`));
+      }
+      if (b.limitations) {
+        console.log(chalk.gray(`\nNote: ${b.limitations}`));
+      }
+    } finally {
+      await quitCliRateLimitRedis();
     }
   });
 
