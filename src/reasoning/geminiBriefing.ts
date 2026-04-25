@@ -14,7 +14,7 @@ Rules:
 - causal_chains: array of { "text": string, "news_ids": string[] }
 - conflicts: array of { "description": string, "how_to_read_it": string }
 - key_drivers: string array, max 5 bullets.
-- limitations: when data is thin or MF look-through is approximate.`;
+- limitations: a single string (one paragraph, not a JSON array) on uncertainty, thin data, or approximate MF look-through.`;
 
 export type GeminiBriefingBundle = {
   briefing: Briefing;

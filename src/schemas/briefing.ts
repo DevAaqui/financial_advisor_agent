@@ -18,7 +18,22 @@ export const BriefingSchema = z.object({
   causal_chains: z.array(CausalChainSchema).default([]),
   conflicts: z.array(ConflictSchema).default([]),
   key_drivers: z.array(z.string()).default([]),
-  /** What the briefing does not know or is uncertain about. */
-  limitations: z.string().optional(),
+  /**
+   * What the briefing does not know or is uncertain about.
+   * Models sometimes return a string[]; we join into one string.
+   */
+  limitations: z.preprocess(
+    (raw) => {
+      if (raw === undefined || raw === null) return undefined;
+      if (Array.isArray(raw)) {
+        return raw
+          .map((x) => (typeof x === "string" ? x : String(x)).trim())
+          .filter(Boolean)
+          .join("\n");
+      }
+      return raw;
+    },
+    z.string().optional()
+  ),
 });
 export type Briefing = z.infer<typeof BriefingSchema>;

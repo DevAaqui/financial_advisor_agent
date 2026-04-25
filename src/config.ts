@@ -9,7 +9,8 @@ const EnvSchema = z.object({
   DATA_DIR: z.string().default("../"),
   /** Required for LLM-generated briefings (Phase 3) via Google Gemini. If unset, a deterministic template is used. */
   GEMINI_API_KEY: z.string().optional(),
-  GEMINI_MODEL: z.string().default("gemini-2.0-flash"),
+  /** Default avoids gemini-2.0-flash (unavailable to new API keys). Override if your project uses another ID. */
+  GEMINI_MODEL: z.string().default("gemini-2.5-flash"),
   /** Phase 4 — Langfuse (optional; LLM traces are only sent when set) */
   LANGFUSE_PUBLIC_KEY: z.string().optional(),
   LANGFUSE_SECRET_KEY: z.string().optional(),
