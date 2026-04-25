@@ -26,8 +26,6 @@ Express + TypeScript backend for the **Autonomous Financial Advisor Agent** chal
 1. **Langfuse** (optional) — when `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` are set, Gemini `generateContent` is traced (prompt, JSON output, token usage). A numeric score `reasoning_quality` is sent for the same trace.
 2. **Rule-based quality** (always) — `reasoningQuality` on every Phase 3 response: grounding of `causal_chains[*].news_ids`, conflict coverage, P&L wording heuristics, and structure. Separate from `confidence`.
 
-> Phases 1–2 use **no LLM**. Phase 3 uses an LLM **optionally**. See [docs/phase1-explained.md](./docs/phase1-explained.md), [docs/phase2-explained.md](./docs/phase2-explained.md), [docs/phase3-explained.md](./docs/phase3-explained.md), [docs/phase4-explained.md](./docs/phase4-explained.md).
-
 ---
 
 ## Stack
@@ -192,7 +190,7 @@ npm run cli -- portfolios
 npm run cli -- portfolio PORTFOLIO_002
 npm run cli -- advise PORTFOLIO_002
 npm run cli -- advise PORTFOLIO_002 --llm      # force Gemini (needs GEMINI_API_KEY)
-npm run cli -- advise PORTFOLIO_002 --template # force rule-based; no key
+npm run cli -- advise PORTFOLIO_002 --as alice@co.com --template # force rule-based; no key
 npm run cli -- advise PORTFOLIO_002 --as alice@co.com --llm
 # If ADVISE_LLM_ALLOWLIST is set in .env, add: --as you@co.com  (address must be on the list)
 ```
